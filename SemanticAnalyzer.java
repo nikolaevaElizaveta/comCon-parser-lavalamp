@@ -193,6 +193,7 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     public void enterAssignment(ImperativeLangParser.AssignmentContext ctx) {
         List<TerminalNode> identifiers = ctx.modifiablePrimary().IDENTIFIER();
         String varName = identifiers.get(0).getText(); // Основное имя переменной (например, s для s.age)
+        usedVariables.add(varName);
         String fieldName = identifiers.size() > 1 ? identifiers.get(1).getText() : null; // Имя поля, если есть (например, age)
 
         // Проверка, объявлена ли переменная
@@ -544,7 +545,7 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
         }
 
         Stack<Double> numbers = new Stack<>();
-        Stack<Character> operations = new Stack<>();
+        Stack<String> operations = new Stack<>();
         StringBuilder currentNumber = new StringBuilder();
 
         for (int i = 0; i < expression.length(); i++) {
@@ -565,41 +566,48 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
                     numbers.push(ch == 't' ? 1.0 : 0.0);
                     // System.out.println("Pushed boolean value to stack: " + (ch == 't' ? 1.0 : 0.0));
                 } else if (ch == '(') {
-                    operations.push(ch);
+                    operations.push(String.valueOf(ch));
                     // System.out.println("Pushed '(' to operations stack");
                 } else if (ch == ')') {
                     // System.out.println("Encountered ')', resolving operations inside parentheses");
-                    while (!operations.isEmpty() && operations.peek() != '(') {
+                    // System.out.println("operations: " + operations + " numbers: " + numbers);
+                    while (!operations.isEmpty() && !operations.peek().equals("(")) {
+                        System.out.println("numbers: " + numbers);
                         if (numbers.size() < 2) {
                             // System.out.println("Numbers stack (insufficient for operation): " + numbers);
                             throw new IllegalArgumentException("Insufficient numbers for operation");
                         }
                         double b = numbers.pop();
                         double a = numbers.pop();
-                        char op = operations.pop();
+                        String op = operations.pop();
                         double result = applyOperation(a, b, op);
                         numbers.push(result);
                         // System.out.println("Performed operation " + op + " on " + a + " and " + b + ", result: " + result);
+                        // System.out.println("operations: " + operations + " numbers: " + numbers);
                     }
                     if (!operations.isEmpty()) {
                         operations.pop(); // Remove '('
                         // System.out.println("Removed '(' from operations stack");
                     }
                 } else if (isOperator(ch)) {
-                    // System.out.println("Encountered operator: " + ch);
-                    while (!operations.isEmpty() && precedence(ch) <= precedence(operations.peek())) {
+                    System.out.println("Encountered operator: " + ch);
+                    String operator = getCompoundOperator(expression, i);
+                    if (operator.length() > 1) {
+                        i++; // Пропускаем следующий символ для составных операторов
+                    }
+                    while (!operations.isEmpty() && precedence(operator) <= precedence(operations.peek())) {
                         if (numbers.size() < 2) {
-                            // System.out.println("Numbers stack (insufficient for operation): " + numbers);
+                            System.out.println("Numbers stack (insufficient for operation): " + numbers);
                             throw new IllegalArgumentException("Insufficient numbers for operation");
                         }
                         double b = numbers.pop();
                         double a = numbers.pop();
-                        char op = operations.pop();
+                        String op = operations.pop();
                         double result = applyOperation(a, b, op);
                         numbers.push(result);
                         System.out.println("Performed operation " + op + " on " + a + " and " + b + ", result: " + result);
                     }
-                    operations.push(ch);
+                    operations.push(String.valueOf(ch));
                     // System.out.println("Pushed operator to operations stack: " + ch);
                 }
             }
@@ -610,17 +618,19 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
             // System.out.println("Pushed final number to stack: " + currentNumber);
         }
 
+        System.err.println("operations: " + operations);
+
         while (!operations.isEmpty()) {
             if (numbers.size() < 2) {
-                System.out.println("Numbers stack (insufficient for operation): " + numbers);
+                // System.out.println("Numbers stack (insufficient for operation): " + numbers);
                 throw new IllegalArgumentException("Insufficient numbers for operation");
             }
             double b = numbers.pop();
             double a = numbers.pop();
-            char op = operations.pop();
+            String op = operations.pop();
             double result = applyOperation(a, b, op);
             numbers.push(result);
-            // System.out.println("Performed final operations " + op + " on " + a + " and " + b + ", result: " + result);
+            System.out.println("Performed final operations " + op + " on " + a + " and " + b + ", result: " + result);
         }
 
         double finalResult = numbers.pop();
@@ -629,36 +639,48 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     }
 
 
-    private double applyOperation(double a, double b, char op) {
+    private double applyOperation(double a, double b, String op) {
         switch (op) {
-            case '+':
+            case "+":
                 return a + b;
-            case '-':
+            case "-":
                 return a - b;
-            case '*':
+            case "*":
                 return a * b;
-            case '/':
+            case "/":
                 if (b == 0) throw new UnsupportedOperationException("Cannot divide by zero");
                 return a / b;
-            case '&':
+            case ">": return a > b ? 1.0 : 0.0;
+            case "<": return a < b ? 1.0 : 0.0;
+            case ">=": return a >= b ? 1.0 : 0.0;
+            case "<=": return a <= b ? 1.0 : 0.0;
+            case "==": return Math.abs(a - b) < 1e-10 ? 1.0 : 0.0;
+                
+            case "&":
                 return (a != 0 && b != 0) ? 1.0 : 0.0; // логическое И
-            case '|':
+            case "|":
                 return (a != 0 || b != 0) ? 1.0 : 0.0; // логическое ИЛИ
             default:
                 throw new IllegalArgumentException("Unsupported operation: " + op);
         }
     }
 
-    private int precedence(char op) {
+    private int precedence(String op) {
         switch (op) {
-            case '+':
-            case '-':
+            case "+":
+            case "-":
                 return 1;
-            case '*':
-            case '/':
+            case "*":
+            case "/":
                 return 2;
-            case '&':
-            case '|':
+            case ">":
+            case "<":
+            case ">=":
+            case "<=":
+            case "==":
+                return 0;
+            case "&":
+            case "|":
                 return 0; // логические операторы
             default:
                 return -1;
@@ -666,9 +688,20 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     }
 
     private boolean isOperator(char ch) {
-        return ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '&' || ch == '|';
+        return ch == '+' || ch == '-' || ch == '*' || ch == '/' || ch == '&' || ch == '|' || ch == '>' || ch == '<';
     }
 
+    private String getCompoundOperator(String expression, int currentIndex) {
+        if (currentIndex + 1 < expression.length()) {
+            char nextChar = expression.charAt(currentIndex + 1);
+            char currentChar = expression.charAt(currentIndex);
+            
+            if (currentChar == '<' && nextChar == '=') return "<=";
+            if (currentChar == '>' && nextChar == '=') return ">=";
+            if (currentChar == '=' && nextChar == '=') return "==";
+        }
+        return String.valueOf(expression.charAt(currentIndex));
+    }
 
 
     // Define a map to store record structures
@@ -687,6 +720,7 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     public void exitProgram(ImperativeLangParser.ProgramContext ctx) {
         for (String var : declaredVariables.keySet()) {
             if (!usedVariables.contains(var)) {
+                // System.out.println(usedVariables);
                 System.out.println("Warning: Variable " + var + " declared but never used.");
             }
         }

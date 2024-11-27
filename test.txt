@@ -1,7 +1,8 @@
-routine Main() is    
-    var i : integer is 1
-    while i <= 10 loop
-        print(i)        
-        i := i + 1
-    end
+routine Square(x : integer) : integer is
+    return x * x
+end
+
+routine Main() is
+    var result : integer is Square(1)
+    print(result)
 end

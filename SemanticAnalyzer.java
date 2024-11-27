@@ -27,7 +27,7 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     private ParseTreeProperty<String> simplifiedExpressions = new ParseTreeProperty<>();
     Map<String, List<String>> routineParameters = new HashMap<>();
     private Map<String, String> routineReturnTypes = new HashMap<>(); // Для хранения типов возвращаемых значений
-
+    private Stack<String> routineStack = new Stack<>();
 
 
     // 1. Declarations Before Usage
@@ -87,6 +87,7 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
     @Override
     public void enterRoutineDeclaration(ImperativeLangParser.RoutineDeclarationContext ctx) {
         String routineName = ctx.IDENTIFIER().getText();
+        routineStack.push(routineName);
         List<String> parameterTypes = new ArrayList<>();
 
         if (ctx.parameters() != null) {
@@ -102,11 +103,24 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
         String returnType = ctx.type() != null ? mapType(ctx.type().getText()) : "void";
         routineReturnTypes.put(routineName, returnType);
         routineParameters.put(routineName, parameterTypes);
-
-
         System.out.println("Declared routine: " + routineName + ", Parameter types: " + parameterTypes + ", Return type: " + returnType);
-
+        
     }
+
+    @Override
+    public void exitRoutineDeclaration(ImperativeLangParser.RoutineDeclarationContext ctx) {
+        if (!routineStack.isEmpty()) {
+           routineStack.pop(); // Pop the routine name from the stack
+       }
+   }
+
+
+   private String getCurrentRoutineName(ParseTree ctx) {
+       if (!routineStack.isEmpty()) {
+           return routineStack.peek(); // Return the current routine name
+       }
+       return null; // Or handle the case where there is no current routine
+   }
 
     @Override
     public void enterRoutineCall(ImperativeLangParser.RoutineCallContext ctx) {
@@ -445,6 +459,22 @@ public class SemanticAnalyzer extends ImperativeLangBaseListener {
         String exprType = determineExpressionType(ctx.expression());
         if (!exprType.equals("boolean")) {
             System.out.println("Error: 'if' condition must be boolean, found " + exprType);
+        }
+    }
+
+    @Override
+    public void enterReturnStatement(ImperativeLangParser.ReturnStatementContext ctx) {
+        String exprType = determineExpressionType(ctx.expression());
+         // Get the current routine's name from the context or a stored variable
+        String routineName = getCurrentRoutineName(ctx); 
+         // Retrieve the expected return type for the routine
+        String expectedReturnType = routineReturnTypes.get(routineName);
+         // Compare the expression type with the expected return type
+        if (!exprType.equals(expectedReturnType)) {
+            System.out.println("Error: Return statement in routine " + routineName + " is of type: " + exprType +
+                    "\nexpected: " + expectedReturnType);
+        } else {
+            System.out.println("Return type matches for routine " + routineName + ": " + exprType);
         }
     }
 

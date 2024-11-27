@@ -107,6 +107,16 @@ public interface ImperativeLangListener extends ParseTreeListener {
 	 */
 	void exitStatement(ImperativeLangParser.StatementContext ctx);
 	/**
+	 * Enter a parse tree produced by {@link ImperativeLangParser#returnStatement}.
+	 * @param ctx the parse tree
+	 */
+	void enterReturnStatement(ImperativeLangParser.ReturnStatementContext ctx);
+	/**
+	 * Exit a parse tree produced by {@link ImperativeLangParser#returnStatement}.
+	 * @param ctx the parse tree
+	 */
+	void exitReturnStatement(ImperativeLangParser.ReturnStatementContext ctx);
+	/**
 	 * Enter a parse tree produced by {@link ImperativeLangParser#assignment}.
 	 * @param ctx the parse tree
 	 */

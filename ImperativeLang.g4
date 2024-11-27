@@ -1,6 +1,6 @@
 grammar ImperativeLang;
 
-program: (simpleDeclaration | routineDeclaration)* ;
+program: (simpleDeclaration | routineDeclaration)*;
 
 simpleDeclaration
     : variableDeclaration
@@ -47,6 +47,11 @@ statement
     | whileLoop
     | forLoop
     | ifStatement
+    | returnStatement
+    ;
+
+returnStatement
+    : 'return' expression?
     ;
 
 assignment
@@ -127,8 +132,8 @@ range
     : expression '..' expression
     ;
 
-INTEGER_LITERAL : [0-9]+ ;
-REAL_LITERAL    : [0-9]+'.'[0-9]+ ;
-IDENTIFIER      : [a-zA-Z_][a-zA-Z_0-9]* ;
-WS              : [ \t\r\n]+ -> skip ;
-COMMENT         : '//' ~[\r\n]* -> skip ;
+INTEGER_LITERAL : [0-9]+;
+REAL_LITERAL    : [0-9]+'.'[0-9]+;
+IDENTIFIER      : [a-zA-Z_][a-zA-Z_0-9]*;
+WS              : [ \t\r\n]+ -> skip;
+COMMENT         : '//' ~[\r\n]* -> skip;

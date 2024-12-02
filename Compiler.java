@@ -6,6 +6,7 @@ import java.util.Locale;
 
 public class Compiler extends ImperativeLangBaseListener {
     private StringBuilder jasminCode = new StringBuilder();
+    
     private int labelCount = 0;
     private Map<String, Integer> variableIndexMap = new HashMap<>();
     private Map<String, String> variableTypeMap = new HashMap<>();
@@ -24,6 +25,7 @@ public class Compiler extends ImperativeLangBaseListener {
 
     // Flag to track if we are inside the main method
     private boolean inMainMethod = false;
+    private StringBuilder currentPath = new StringBuilder();
 
     // Method to get the generated code
     public String getCode() {
@@ -42,23 +44,26 @@ public class Compiler extends ImperativeLangBaseListener {
     }
 
     private int getVariableIndex(String varName, String varType, int changePrevReal) {
-        System.out.println(variableIndexMap + " " + prevIndex + " prevWasReal:" + prevReal + " change:" + changePrevReal);
+        System.out
+                .println(variableIndexMap + " " + prevIndex + " prevWasReal:" + prevReal + " change:" + changePrevReal);
 
         if (!variableIndexMap.containsKey(varName)) {
+            System.out.println("is not in the map");
             int baseIndex;
-            if (prevReal==1){
+            if (prevReal == 1) {
                 baseIndex = 2;
             } else {
-                baseIndex = inMainMethod ? 1 : 0; // Offset for static method
+                // baseIndex = inMainMethod ? 1 : 0; // Offset for static method
+                baseIndex = 1;
             }
             variableIndexMap.put(varName, prevIndex + baseIndex);
         }
         int index = variableIndexMap.get(varName);
-        System.out.println(varName +" index: " + index);
+        System.out.println(varName + " index: " + index);
         if (index + 1 > maxLocals) {
-            if (prevReal == 1){
+            if (prevReal == 1) {
                 maxLocals = index + 2;
-            } else {            
+            } else {
                 maxLocals = index + 1;
             }
 
@@ -69,16 +74,17 @@ public class Compiler extends ImperativeLangBaseListener {
 
         System.out.println(varName + ": " + varType);
 
-        if ((varType.equals("real") || varType.equals("D")) && changePrevReal==1){
+        if ((varType.equals("real") || varType.equals("D")) && changePrevReal == 1) {
             System.out.println("IT IS REAL");
             prevReal = 1;
-        } else if (changePrevReal==1){
+        } else if (changePrevReal == 1) {
             prevReal = 0;
         }
-        if (index > prevIndex){
+        if (index > prevIndex) {
             prevIndex = index;
         }
-        System.out.println(variableIndexMap + " " + prevIndex + " prevWasReal:" + prevReal + " change:" + changePrevReal+ "\n");
+        System.out.println(
+                variableIndexMap + " " + prevIndex + " prevWasReal:" + prevReal + " change:" + changePrevReal + "\n");
         return index;
     }
 
@@ -95,19 +101,76 @@ public class Compiler extends ImperativeLangBaseListener {
 
     @Override
     public void exitProgram(ImperativeLangParser.ProgramContext ctx) {
+
         // The getCode() method will return the generated code
     }
 
     @Override
     public void enterRoutineDeclaration(ImperativeLangParser.RoutineDeclarationContext ctx) {
+        System.out.println("\nentering RoutineDeclaration..." + ctx.getText());
+        String routineDeclarationJasminCode = "";
         String routineName = ctx.IDENTIFIER().getText();
         if (routineName.equals("Main")) {
             inMainMethod = true; // Set the flag
+            currentPath = new StringBuilder();
             variableIndexMap.clear(); // Reset variable indices for the new method
             variableTypeMap.clear(); // Reset variable types
             jasminCode.append(".method public static main([Ljava/lang/String;)V\n");
+        } else {
+            inMainMethod = false;
+            currentPath = currentPath.append(routineName).append("/");
+
+            // Начинаем декларацию метода
+            jasminCode.append(".method public static ")
+                    .append(routineName)
+                    .append("(");
+
+            // Обработка параметров
+            if (ctx.parameters() != null) {
+                for (ImperativeLangParser.ParameterDeclarationContext param : ctx.parameters().parameterDeclaration()) {
+                    String paramType = getTypeDescriptor(param.type().getText());
+                    jasminCode.append(paramType);
+
+                    // Сохранение типа параметра в карте переменных
+                    String paramName = param.IDENTIFIER().getText();
+                    variableIndexMap.put(paramName, variableIndexMap.size()); // Индекс переменной
+                    System.out.println("-----------INDEX " + getVariableIndex(paramName, paramType, 1));
+                    variableTypeMap.put(paramName, paramType); // Тип переменной
+                }
+            }
+
+            jasminCode.append(")");
+
+            // Обработка возвращаемого типа (если есть)
+            if (ctx.type() != null) {
+                jasminCode.append(getTypeDescriptor(ctx.type().getText()));
+            } else {
+                jasminCode.append("V"); // По умолчанию void
+            }
+
+            jasminCode.append("\n");
+            jasminCode.append(".limit stack 10\n")
+                .append(".limit locals 10\n");
         }
+
+        // Указание начала метода и инициализация стека
+        
         // If you have other routines, handle them here
+    }
+
+    private String getTypeDescriptor(String type) {
+        switch (type) {
+            case "integer":
+                return "I"; // int
+            case "real":
+                return "F"; // float
+            case "boolean":
+                return "Z"; // boolean
+            case "void":
+                return "V"; // void
+            default:
+                return "L" + type + ";"; // Для пользовательских типов
+        }
     }
 
     @Override
@@ -124,15 +187,17 @@ public class Compiler extends ImperativeLangBaseListener {
             currentStack = 0;
             variableIndexMap.clear(); // Clear variables for the next method
             variableTypeMap.clear();
+        } else {
+            jasminCode.append("   return\n").append(".end method\n\n");
         }
     }
 
     private void performTypeCast(String fromType, String toType) {
-        if (fromType.equals("I")){
+        if (fromType.equals("I")) {
             fromType = "integer";
-        } else if (fromType.equals("D")){
+        } else if (fromType.equals("D")) {
             fromType = "real";
-        } else if (fromType.equals("D")){
+        } else if (fromType.equals("D")) {
             fromType = "boolean";
         }
 
@@ -141,23 +206,23 @@ public class Compiler extends ImperativeLangBaseListener {
             if (fromType.equals("real") && toType.equals("integer")) {
                 System.out.println("from REAL to INTEGER");
 
-                jasminCode.append("   d2i\n");  
-                updateStack(-1);  
+                jasminCode.append("   d2i\n");
+                updateStack(-1);
             } else if (fromType.equals("bool") && toType.equals("integer")) {
-                jasminCode.append("   b2i\n"); 
-            } else if (fromType.equals("real") && toType.equals("boolean")){
+                jasminCode.append("   b2i\n");
+            } else if (fromType.equals("real") && toType.equals("boolean")) {
                 jasminCode.append("   d2i\n");
             }
         } else {
             System.out.println("no TypeCast ");
+
         }
     }
-
 
     @Override
     public void enterVariableDeclaration(ImperativeLangParser.VariableDeclarationContext ctx) {
         System.out.println("ctx: " + ctx.getText());
-        if (ctx.expression()!=null){
+        if (ctx.expression() != null) {
             System.out.println("\nEntering var declaration: " + ctx.getText() + " " + ctx.expression().getText());
         }
         String variableName = ctx.IDENTIFIER().getText();
@@ -178,10 +243,12 @@ public class Compiler extends ImperativeLangBaseListener {
             } else if (typeInfo.equals("boolean")) {
                 varType = "I";
             } else {
-                System.out.println("user type?" + ctx.type().getText());
+                System.out.println("user type? " + ctx.type().getText());
+                varType = typeInfo.toString();
 
             }
             variableTypeMap.put(variableName, varType);
+            System.out.println("variableName " + variableName + " varType " + varType);
         }
 
         // Если есть выражение
@@ -202,11 +269,10 @@ public class Compiler extends ImperativeLangBaseListener {
                 }
             }
 
-
             // Генерация кода выражения
             if (ctx.expression() != null) {
                 // System.out.println("here");
-                
+
                 if (varType.equals("I") || varType.equals("Z")) {
                     jasminCode.append("   istore ").append(varIndex).append("\n");
                     updateStack(-1);
@@ -230,8 +296,6 @@ public class Compiler extends ImperativeLangBaseListener {
                 }
             }
 
-            
-
             // Сохранение значения в переменную
             // allocateVariable(variableName, variableType);
         } else {
@@ -246,8 +310,9 @@ public class Compiler extends ImperativeLangBaseListener {
         // Здесь должен быть ваш анализатор типов, который проверяет выражение.
         System.out.println("Expression: " + ctx.getText());
         return getExpressionType(ctx);
-        
-        // return ctx.getText().matches("\\d+") ? "integer" : "real"; // Упрощённый пример
+
+        // return ctx.getText().matches("\\d+") ? "integer" : "real"; // Упрощённый
+        // пример
     }
 
     @Override
@@ -258,26 +323,28 @@ public class Compiler extends ImperativeLangBaseListener {
         // String varType = "I"; // Default type is integer
 
         // if (ctx.type() != null) {
-        //     Object typeInfo = processType(ctx.type());
-        //     if (typeInfo.equals("integer")) {
-        //         varType = "I";
-        //     } else if (typeInfo.equals("real")) {
-        //         varType = "D";
-        //     } else if (typeInfo.equals("boolean")) {
-        //         varType = "I";
-        //     }
-        //     variableTypeMap.put(varName, varType);
+        // Object typeInfo = processType(ctx.type());
+        // if (typeInfo.equals("integer")) {
+        // varType = "I";
+        // } else if (typeInfo.equals("real")) {
+        // varType = "D";
+        // } else if (typeInfo.equals("boolean")) {
+        // varType = "I";
+        // }
+        // variableTypeMap.put(varName, varType);
         // }
 
     }
 
     private Object processType(ImperativeLangParser.TypeContext typeCtx) {
+        System.out.println("typeCtx " + typeCtx.getText());
         if (typeCtx.primitiveType() != null) {
             return typeCtx.primitiveType().getText();
         } else if (typeCtx.userType() != null) {
             // Handle user-defined types, arrays, etc.
             // throw new UnsupportedOperationException("User types are not supported yet.");
             ImperativeLangParser.UserTypeContext userTypeCtx = typeCtx.userType();
+            System.out.println("userTypeCtx " + userTypeCtx.getText());
             if (userTypeCtx.arrayType() != null) {
                 // Обрабатываем массив
                 return processArrayType(userTypeCtx.arrayType());
@@ -296,15 +363,17 @@ public class Compiler extends ImperativeLangBaseListener {
     private Object processArrayType(ImperativeLangParser.ArrayTypeContext arrayTypeCtx) {
         String arrayElementType = arrayTypeCtx.type().getText();
         String dimensions = arrayTypeCtx.expression() != null ? arrayTypeCtx.expression().getText() : "[]";
-        
-        System.out.println("Обнаружен массив с элементами типа: " + arrayElementType + " и размерностью: " + dimensions);
-        
+
+        System.out
+                .println("Обнаружен массив с элементами типа: " + arrayElementType + " и размерностью: " + dimensions);
+
         // Добавление информации о массиве в jasminCode
         jasminCode.append("   ; Объявление массива типа ").append(arrayElementType).append("\n");
 
         // Генерация кода для определения размера массива
         if (arrayTypeCtx.expression() != null) {
             generateExpression(arrayTypeCtx.expression());
+            performTypeCast(analyzeExpressionType(arrayTypeCtx.expression()), "integer");
         } else {
             jasminCode.append("   ldc 0 ; Размер массива по умолчанию\n");
             updateStack(1);
@@ -320,28 +389,86 @@ public class Compiler extends ImperativeLangBaseListener {
         } else {
             jasminCode.append("   anewarray ").append(arrayElementType).append("\n");
         }
-        
-        updateStack(0);  // Создание массива не изменяет стек.
+
+        // Получаем имя массива из родительского VariableDeclarationContext
+        ParseTree parent = arrayTypeCtx.getParent();
+        if (parent instanceof ImperativeLangParser.UserTypeContext) {
+            String arrayName = "";
+            ImperativeLangParser.UserTypeContext utctx = (ImperativeLangParser.UserTypeContext) parent;
+            parent = utctx.getParent();
+            if (parent instanceof ImperativeLangParser.TypeContext) {
+                ImperativeLangParser.TypeContext tctx = (ImperativeLangParser.TypeContext) parent;
+                parent = tctx.getParent();
+                if (parent instanceof ImperativeLangParser.VariableDeclarationContext) {
+                    ImperativeLangParser.VariableDeclarationContext vdctx = (ImperativeLangParser.VariableDeclarationContext) parent;
+
+                    arrayName = vdctx.IDENTIFIER().getText();
+                    System.out.println("arrayName " + arrayName);
+                }
+            }
+
+            // Записываем массив в локальную переменную
+            int arrayIndex = getVariableIndex(arrayName, arrayElementType, 1);
+            jasminCode.append("   astore_").append(arrayIndex).append("  ; Сохранение массива ").append(arrayName)
+                    .append("\n");
+        } else {
+            throw new RuntimeException("Не удалось получить имя массива.");
+        }
+
+        updateStack(-1); // Создание массива не изменяет стек.
 
         return "Array<" + arrayElementType + ">";
     }
 
     // Обработка записи
-    private Object processRecordType(ImperativeLangParser.RecordTypeContext recordTypeCtx) {
-        StringBuilder recordDefinition = new StringBuilder("Record { ");
-        for (ImperativeLangParser.VariableDeclarationContext varDecl : recordTypeCtx.variableDeclaration()) {
-            String varName = varDecl.IDENTIFIER().getText();
-            String varType = processType(varDecl.type()).toString();
-            recordDefinition.append(varName).append(": ").append(varType).append("; ");
+    // private Object processRecordType(ImperativeLangParser.RecordTypeContext
+    // recordTypeCtx) {
+    // StringBuilder recordDefinition = new StringBuilder("Record { ");
+    // for (ImperativeLangParser.VariableDeclarationContext varDecl :
+    // recordTypeCtx.variableDeclaration()) {
+    // String varName = varDecl.IDENTIFIER().getText();
+    // String varType = processType(varDecl.type()).toString();
+    // recordDefinition.append(varName).append(": ").append(varType).append("; ");
+    // }
+    // recordDefinition.append("}");
+    // System.out.println("Обнаружена запись: " + recordDefinition);
+    // return recordDefinition.toString();
+    // }
+
+    private Object processRecordType(ImperativeLangParser.RecordTypeContext recordCtx) {
+        // Create a container to hold the fields of the record
+        Map<String, String> recordFields = new HashMap<>();
+
+        // Iterate over each variableDeclaration in the record type
+        for (ImperativeLangParser.VariableDeclarationContext varDeclCtx : recordCtx.variableDeclaration()) {
+            String varName = varDeclCtx.IDENTIFIER().getText(); // Get the variable name
+            String varType = processType(varDeclCtx.type()).toString(); // Get the variable type (processed type)
+
+
+            // Store the field's name and type in the record
+            recordFields.put(varName, varType);
         }
-        recordDefinition.append("}");
-        System.out.println("Обнаружена запись: " + recordDefinition);
-        return recordDefinition.toString();
+
+        // Return a representation of the record type
+        return recordFields;
     }
 
     @Override
     public void enterAssignment(ImperativeLangParser.AssignmentContext ctx) {
         System.out.println("Entering assignment: " + ctx.getText());
+        // ??????
+        if (ctx.modifiablePrimary().getText().contains("[")) {
+            ImperativeLangParser.ModifiablePrimaryContext modCtx = ctx.modifiablePrimary();
+            String varName = modCtx.IDENTIFIER(0).getText();
+            String varType = variableTypeMap.get(varName);
+            System.out.println("in exit assignment for variable: " + varName);
+
+            int varIndex = getVariableIndex(varName, varType, 1);
+            System.out.println("CONTAINS1!!!! " + ctx.getText());
+
+            jasminCode.append("   aload ").append(varIndex).append("\n");
+        }
+        // ??????
     }
 
     @Override
@@ -349,27 +476,92 @@ public class Compiler extends ImperativeLangBaseListener {
         ImperativeLangParser.ModifiablePrimaryContext modCtx = ctx.modifiablePrimary();
         String varName = modCtx.IDENTIFIER(0).getText();
         String varType = variableTypeMap.get(varName);
-        System.out.println("in exit assignment");
-        int varIndex = getVariableIndex(varName, varType, 1);
-        // System.out.println("ctx: " + ctx.getText());
-        // if (ctx.getText().contains(":=")) {
-        //     System.out.println("it is an assignment");
-        //     generateExpression(ctx.assignment().expression());
-        // }
-        generateExpression(ctx.expression());
+        System.out.println("in exit assignment for variable: " + varName);
 
-        if (varType.equals("I") || varType.equals("Z")) {
-            jasminCode.append("   istore ").append(varIndex).append("\n");
-            updateStack(-1);
-        } else if (varType.equals("D")) {
-            System.out.println("dstore " + varIndex + " " + varType + "varName" +
-                    varName);
-            jasminCode.append("   dstore ").append(varIndex).append("\n");
-            updateStack(-2);
+        // Генерация кода для выражения
+        generateExpression(ctx.expression());
+        int varIndex = getVariableIndex(varName, varType, 1);
+
+        // Обработка массива
+        if (modCtx.getText().contains("[")) {
+            // Это обращение к массиву
+            System.out.println("Array assignment detected: " + varName);
+
+            // jasminCode.append("1111 aload ").append(varIndex).append("\n");
+            // jasminCode.append(" swap ").append(varIndex).append("\n");
+
+            // Получаем индекс массива из контекста
+            ImperativeLangParser.ExpressionContext indexCtx = modCtx.expression(0);
+            generateExpression(indexCtx); // Загружаем индекс на стек
+            performTypeCast(analyzeExpressionType(indexCtx), "integer"); // Преобразуем тип индекса, если нужно
+
+            // Корректировка индекса: вычитаем 1, чтобы получить правильную индексацию
+            jasminCode.append("   iconst_1\n"); // Загружаем 1
+            jasminCode.append("   isub\n"); // Вычитаем 1 из индекса
+
+            jasminCode.append("   swap").append("\n");
+            // jasminCode.append(varType).append("\n");
+
+            // Записываем в массив
+            if (varType.equals("I") || varType.equals("Z") || varType.equals("integer") || varType.equals("boolean")
+                    || varType.equals("bool") || varType.equals("Array<integer>")) {
+                // jasminCode.append("1 aload ").append(varIndex).append("\n");
+                // jasminCode.append("1 swap").append("\n");
+                jasminCode.append("   iastore\n"); // Сохраняем значение в массив для целых чисел
+                updateStack(-3); // После iastore в стеке должно быть меньше элементов
+            } else if (varType.equals("D")) {
+                jasminCode.append("   dastore\n"); // Для типов с плавающей запятой
+                updateStack(-3); // После dastore в стеке должно быть меньше элементов
+            } else if (varType.equals("Z")) {
+                jasminCode.append("   bastore\n"); // Для булевых типов
+                updateStack(-3); // После bastore в стеке должно быть меньше элементов
+            }
         } else {
-            // Handle other types if needed
+            // Для обычной переменной
+
+            if (varType.equals("I") || varType.equals("Z")) {
+                jasminCode.append("   istore ").append(varIndex).append("\n");
+                updateStack(-1);
+            } else if (varType.equals("D")) {
+                jasminCode.append("   dstore ").append(varIndex).append("\n");
+                updateStack(-2);
+            } else {
+                // Обработка других типов, если необходимо
+            }
         }
     }
+
+    // @Override
+    // public void exitAssignment(ImperativeLangParser.AssignmentContext ctx) {
+    // ImperativeLangParser.ModifiablePrimaryContext modCtx =
+    // ctx.modifiablePrimary();
+    // String varName = modCtx.IDENTIFIER(0).getText();
+    // String varType = variableTypeMap.get(varName);
+    // System.out.println("in exit assignment");
+    // int varIndex = getVariableIndex(varName, varType, 1);
+    // // System.out.println("ctx: " + ctx.getText());
+    // // if (ctx.getText().contains(":=")) {
+    // // System.out.println("it is an assignment");
+    // // generateExpression(ctx.assignment().expression());
+    // // }
+    // generateExpression(ctx.expression());
+
+    // if(!ctx.modifiablePrimary().getText().contains("[")) {
+    // if (varType.equals("I") || varType.equals("Z")) {
+    // jasminCode.append("3 istore ").append(varIndex).append("\n");
+    // updateStack(-1);
+    // } else if (varType.equals("D")) {
+    // System.out.println("dstore " + varIndex + " " + varType + "varName" +
+    // varName);
+    // jasminCode.append(" dstore ").append(varIndex).append("\n");
+    // updateStack(-2);
+    // } else {
+    // // Handle other types if needed
+    // }
+    // } else {
+
+    // }
+    // }
 
     @Override
     public void enterWhileLoop(ImperativeLangParser.WhileLoopContext ctx) {
@@ -385,7 +577,7 @@ public class Compiler extends ImperativeLangBaseListener {
 
         generateExpression(ctx.expression());
 
-        // jasminCode.append("   ifeq Label").append(endLabel).append("\n");
+        // jasminCode.append(" ifeq Label").append(endLabel).append("\n");
         // updateStack(-1);
     }
 
@@ -393,19 +585,20 @@ public class Compiler extends ImperativeLangBaseListener {
     public void exitWhileLoop(ImperativeLangParser.WhileLoopContext ctx) {
         int startLabel = startLabels.get(ctx);
         int endLabel = endLabels.get(ctx);
-        // System.out.println("startLabels " + startLabels + "\nendLabels " + endLabels);
+        // System.out.println("startLabels " + startLabels + "\nendLabels " +
+        // endLabels);
         // Напечатаем содержимое startLabels
         // System.out.println("Start Labels:");
         // for (ParseTree node : startLabels.keySet()) {
-        //     int label = startLabels.get(node);
-        //     System.out.println("Node: " + node.getText() + " -> Label" + label);
+        // int label = startLabels.get(node);
+        // System.out.println("Node: " + node.getText() + " -> Label" + label);
         // }
 
         // // Напечатаем содержимое endLabels
         // System.out.println("End Labels:");
         // for (ParseTree node : endLabels.keySet()) {
-        //     int label = endLabels.get(node);
-        //     System.out.println("Node: " + node.getText() + " -> Label" + label);
+        // int label = endLabels.get(node);
+        // System.out.println("Node: " + node.getText() + " -> Label" + label);
         // }
 
         jasminCode.append("   goto Label").append(startLabel).append("\n");
@@ -415,7 +608,6 @@ public class Compiler extends ImperativeLangBaseListener {
     @Override
     public void enterBody(ImperativeLangParser.BodyContext ctx) {
         // System.out.println("Входим в метод enterBody..." + ctx.getText());
-
 
         // Проверяем, является ли данный body частью if-then
         ParseTree parent = ctx.getParent();
@@ -440,73 +632,111 @@ public class Compiler extends ImperativeLangBaseListener {
     @Override
     public void enterIfStatement(ImperativeLangParser.IfStatementContext ctx) {
         System.out.println("\nentering IfStatement...");
-        int elseLabel = getNextLabel();
+        
+        // if (ctx.getText().contains("else")) {
+            int elseLabel = getNextLabel();
+            startLabels.put(ctx, elseLabel);
+            startLabelsStack.push(elseLabel); // позер
+
+            endLabels.put(ctx, elseLabel);
+            endLabelsStack.push(elseLabel);
+            System.out.println("elseLabel: " + elseLabel);
+
+        // }
         int endLabel = getNextLabel();
         int ifendlabel = getNextLabel();
         ifEndLabelsStack.push(ifendlabel); // реальный конец иф
+        System.out.println("endLabel: " + endLabel + ", ifendlabel: " + ifendlabel);
 
-        startLabels.put(ctx, elseLabel);
-        startLabelsStack.push(elseLabel); // позер
-
-        endLabels.put(ctx, elseLabel);
-        endLabelsStack.push(elseLabel);
-
+        
         System.out.println("ctx.getText(): " + ctx.getText());
         System.out.println("ctx.expression().getText() " + ctx.expression().getText());
         generateExpression(ctx.expression());
 
-        if ( ctx.getText().contains("else")){
+        if (ctx.getText().contains("else")) {
 
             System.out.println("trying... " + ctx.body(0).getText());
             if (ctx.body() != null && ctx.body().size() > 0) {
                 for (ImperativeLangParser.StatementContext statementCtx : ctx.body(0).statement()) {
-                    System.out.println("routine call------------------------------- " + statementCtx.getText() + ": "+statementCtx.routineCall().getText());
+                    System.out.println("routine call------------------------------- " + statementCtx.getText() + ": "
+                            + statementCtx.routineCall().getText());
                     if (statementCtx.routineCall() != null) {
                         generateRoutineCall(statementCtx.routineCall());
-                        System.out.println("finished routine call----------------------- " + statementCtx.routineCall().getText());
+                        System.out.println(
+                                "finished routine call----------------------- " + statementCtx.routineCall().getText());
 
                     }
 
                     // if (statementCtx instanceof ImperativeLangParser.RoutineCallContext) {
-                    //     // Обработка вызова процедуры
-                    //     ImperativeLangParser.RoutineCallContext routineCallCtx = (ImperativeLangParser.RoutineCallContext) statementCtx;
-                    //     generateRoutineCall(routineCallCtx);
+                    // // Обработка вызова процедуры
+                    // ImperativeLangParser.RoutineCallContext routineCallCtx =
+                    // (ImperativeLangParser.RoutineCallContext) statementCtx;
+                    // generateRoutineCall(routineCallCtx);
                     // }
                 }
                 jasminCode.append("   goto Label").append(ifEndLabelsStack.peek()).append("\n");
-                jasminCode.append("Label").append(elseLabel).append(":\n");
+                if (ctx.getText().contains("else")){
+                    jasminCode.append("Label").append(elseLabel).append(":\n");
+                }
 
             }
             System.out.println("trying...x2 " + ctx.body(1).getText());
             // generateExpression(ctx.body(1));
             System.out.println("haha?");
 
+        } else {
+            // jasminCode.append("no else").append("\n");
+            System.out.println("trying... " + ctx.body(0).getText());
+            if (ctx.body() != null && ctx.body().size() > 0) {
+                for (ImperativeLangParser.StatementContext statementCtx : ctx.body(0).statement()) {
+                    System.out.println("routine call------------------------------- " + statementCtx.getText() + ": "
+                            + statementCtx.routineCall().getText());
+                    if (statementCtx.routineCall() != null) {
+                        generateRoutineCall(statementCtx.routineCall());
+                        System.out.println(
+                                "finished routine call----------------------- " + statementCtx.routineCall().getText());
+
+                    }
+
+                    // if (statementCtx instanceof ImperativeLangParser.RoutineCallContext) {
+                    // // Обработка вызова процедуры
+                    // ImperativeLangParser.RoutineCallContext routineCallCtx =
+                    // (ImperativeLangParser.RoutineCallContext) statementCtx;
+                    // generateRoutineCall(routineCallCtx);
+                    // }
+                }
+                // jasminCode.append("   goto Label").append(ifEndLabelsStack.peek()).append("\n");
+                // if (ctx.getText().contains("else")){
+                //     jasminCode.append("Label").append(elseLabel).append(":\n");
+                // }
+
+            }
+
         }
 
-
-        // jasminCode.append("   entering IfStatement...").append("\n");
-        // jasminCode.append("   ifeq Label").append(endLabel).append("\n");
+        // jasminCode.append(" ifeq Label").append(endLabel).append("\n");
         // updateStack(-1);
-        // jasminCode.append("   exitting IfStatement...").append("\n");
+        // jasminCode.append(" exitting IfStatement...").append("\n");
     }
 
     // @Override
-    // public void enterElseStatement(ImperativeLangParser.ElseStatementContext ctx) {
-    //     System.out.println("\nEntering ElseStatement...");
-    //     int elseLabel = getNextLabel();
-    //     int endLabel = endLabelsStack.peek(); // Берем метку конца if-else из стека
+    // public void enterElseStatement(ImperativeLangParser.ElseStatementContext ctx)
+    // {
+    // System.out.println("\nEntering ElseStatement...");
+    // int elseLabel = getNextLabel();
+    // int endLabel = endLabelsStack.peek(); // Берем метку конца if-else из стека
 
-    //     // Записываем метку для блока else
-    //     jasminCode.append("Label").append(elseLabel).append(":\n");
+    // // Записываем метку для блока else
+    // jasminCode.append("Label").append(elseLabel).append(":\n");
 
-    //     // Генерация кода для блока else
-    //     // Пример: код для печати переменной b
-    //     jasminCode.append("   getstatic java/lang/System/out Ljava/io/PrintStream;\n");
-    //     jasminCode.append("   iload 2\n"); // Переменная b
-    //     jasminCode.append("   invokevirtual java/io/PrintStream/println(I)V\n");
+    // // Генерация кода для блока else
+    // // Пример: код для печати переменной b
+    // jasminCode.append(" getstatic java/lang/System/out Ljava/io/PrintStream;\n");
+    // jasminCode.append(" iload 2\n"); // Переменная b
+    // jasminCode.append(" invokevirtual java/io/PrintStream/println(I)V\n");
 
-    //     // Переход к метке конца if-else
-    //     jasminCode.append("   goto Label").append(endLabel).append("\n");
+    // // Переход к метке конца if-else
+    // jasminCode.append(" goto Label").append(endLabel).append("\n");
     // }
 
     @Override
@@ -515,7 +745,7 @@ public class Compiler extends ImperativeLangBaseListener {
         System.out.println("elseLabel " + elseLabel);
         int ifendLabel = ifEndLabelsStack.peek();
 
-        // jasminCode.append("   exitIfStatement...").append("\n");
+        // jasminCode.append(" exitIfStatement...").append("\n");
         if (ctx.body().size() > 1) {
             jasminCode.append("   goto Label").append(ifendLabel).append("\n");
             // jasminCode.append("2Label").append(elseLabel).append(":\n"); // ??
@@ -542,13 +772,13 @@ public class Compiler extends ImperativeLangBaseListener {
                 if (parent instanceof ImperativeLangParser.IfStatementContext) {
                     System.out.println("Этот body является частью ifStatement...");
                     ImperativeLangParser.IfStatementContext ifCtx = (ImperativeLangParser.IfStatementContext) parent;
-                    if (ifCtx.body(0).getText().equals(ctx.getText())){
+                    if (ifCtx.body(0).getText().equals(ctx.getText())) {
                         System.out.println("скип");
 
-                        return; 
+                        return;
                     }
                 }
-                
+
             }
 
         }
@@ -556,11 +786,13 @@ public class Compiler extends ImperativeLangBaseListener {
         if (funcName.equals("print")) {
             ImperativeLangParser.ExpressionListContext exprList = ctx.expressionList();
             if (exprList != null && exprList.expression().size() == 1) {
-                // jasminCode.append("   exitRoutineCall;\n");
+                // jasminCode.append(" exitRoutineCall;\n");
                 jasminCode.append("   getstatic java/lang/System/out Ljava/io/PrintStream;\n");
                 updateStack(1);
 
                 generateExpression(exprList.expression(0));
+                // jasminCode.append(" iconst_1").append("\n");
+                // jasminCode.append(" isub").append("\n");
                 String exprType = getExpressionType(exprList.expression(0));
 
                 if (exprType.equals("I") || exprType.equals("Z")) {
@@ -569,6 +801,45 @@ public class Compiler extends ImperativeLangBaseListener {
                 } else if (exprType.equals("D")) {
                     jasminCode.append("   invokevirtual java/io/PrintStream/println(D)V\n");
                     updateStack(-3);
+                } else if (exprType.contains("Array<") && exprType.contains(">")) {
+                    // Печать элемента массива
+                    String elementType = exprType.substring(6, exprType.length() - 1); // Получаем тип элементов массива
+
+                    // Загружаем массив на стек
+                    // jasminCode.append(" aload ")
+                    // .append(getVariableIndex(exprList.expression(0).getText(), exprType,
+                    // 0)).append("\n");
+                    // jasminCode.append(exprList.expression(0).getText()).append("\n");
+                    // updateStack(1);
+
+                    // Получаем индекс элемента массива (например, передается в print() как второй
+                    // аргумент)
+                    ImperativeLangParser.ExpressionContext indexCtx = exprList.expression(1); // Индекс в массиве
+                    // generateExpression(indexCtx); // Генерация кода для вычисления индекса
+
+                    // // Загружаем элемент массива в зависимости от его типа
+                    // if (elementType.equals("I") || elementType.equals("Z") ||
+                    // elementType.equals("integer")
+                    // || elementType.equals("boolean") || elementType.equals("bool")) {
+                    // jasminCode.append("1 iaload\n"); // Для целых чисел
+                    // updateStack(-1);
+                    // } else if (elementType.equals("D")) {
+                    // jasminCode.append(" daload\n"); // Для чисел с плавающей запятой
+                    // updateStack(-1);
+                    // } else {
+                    // throw new UnsupportedOperationException(
+                    // "Unsupported array element type for print: " + elementType);
+                    // }
+
+                    // Печать элемента массива
+                    if (elementType.equals("I") || elementType.equals("Z") || elementType.equals("integer")
+                            || elementType.equals("boolean") || elementType.equals("bool")) {
+                        jasminCode.append("   invokevirtual java/io/PrintStream/println(I)V\n");
+                        updateStack(-1);
+                    } else if (elementType.equals("D")) {
+                        jasminCode.append("   invokevirtual java/io/PrintStream/println(D)V\n");
+                        updateStack(-2);
+                    }
                 } else {
                     throw new UnsupportedOperationException("Unsupported type for print: " + exprType);
                 }
@@ -576,15 +847,61 @@ public class Compiler extends ImperativeLangBaseListener {
                 throw new UnsupportedOperationException("print() with multiple arguments is not supported.");
             }
         } else {
-            throw new UnsupportedOperationException("Routine call to " + funcName + " is not supported.");
+            handleUserDefinedRoutineCall(ctx, funcName);
+            // throw new UnsupportedOperationException("Routine call to " + funcName + " is not supported.");
         }
+    }
+
+    // Метод для обработки вызова пользовательских рутин
+    private void handleUserDefinedRoutineCall(ImperativeLangParser.RoutineCallContext ctx, String funcName) {
+        ImperativeLangParser.ExpressionListContext exprList = ctx.expressionList();
+        int argumentCount = (exprList != null) ? exprList.expression().size() : 0;
+
+        // Генерация кода для каждого аргумента
+        if (exprList != null) {
+            for (ImperativeLangParser.ExpressionContext exprCtx : exprList.expression()) {
+                generateExpression(exprCtx);
+            }
+        }
+
+        if (inMainMethod){
+            // Вызов пользовательской рутины
+            jasminCode.append("   invokestatic ")
+                    .append("Main/")
+                    .append(funcName)
+                    .append("(");
+        } else {
+            // Вызов пользовательской рутины
+            jasminCode.append("   invokestatic ")
+                    .append("Main/")
+                    .append(currentPath)
+                    .append(funcName)
+                    .append("(");
+        }
+
+        
+
+        // Добавляем дескрипторы типов аргументов
+        if (exprList != null) {
+            for (ImperativeLangParser.ExpressionContext exprCtx : exprList.expression()) {
+                jasminCode.append(getExpressionType(exprCtx));
+            }
+        }
+        
+        jasminCode.append(")");
+
+        // Если возвращаемый тип рутины известен, добавляем его
+        jasminCode.append("V").append("\n"); // По умолчанию void
+
+        updateStack(-argumentCount); // Снижаем стек на количество аргументов
     }
 
     private void generateExpression(ImperativeLangParser.ExpressionContext ctx) {
         System.out.println("Compiling an expression... " + ctx.getText());
         System.out.println(currentStack);
         if (ctx.relation().size() == 1) {
-            // System.out.println("generateExpression relation " + ctx.relation(0).getText());
+            // System.out.println("generateExpression relation " +
+            // ctx.relation(0).getText());
             generateRelation(ctx.relation(0));
         } else {
             // Logical operations (and, or, xor)
@@ -613,7 +930,8 @@ public class Compiler extends ImperativeLangBaseListener {
     }
 
     private void generateRelation(ImperativeLangParser.RelationContext ctx) {
-        // System.out.println("generateRelation " + ctx.getText() + " " + ctx.simple().size());
+        // System.out.println("generateRelation " + ctx.getText() + " " +
+        // ctx.simple().size());
         if (ctx.simple().size() == 1) {
             generateSimple(ctx.simple(0));
         } else {
@@ -626,7 +944,7 @@ public class Compiler extends ImperativeLangBaseListener {
             String exprType = getExpressionType(ctx.simple(0));
             System.out.println("exprType is " + exprType);
 
-            // jasminCode.append("   generateRelation beginning").append("\n");
+            // jasminCode.append(" generateRelation beginning").append("\n");
 
             if (exprType.equals("I") || exprType.equals("Z")) {
                 switch (op) {
@@ -688,22 +1006,64 @@ public class Compiler extends ImperativeLangBaseListener {
                 throw new UnsupportedOperationException("Unsupported type for comparison.");
             }
 
-            // jasminCode.append("   iconst_0\n");
+            // jasminCode.append(" iconst_0\n");
             updateStack(1);
 
-            jasminCode.append("   goto Label").append(endLabelsStack.peek()).append("\n");
+            // jasminCode.append(ctx.getText());
 
-            jasminCode.append("Label").append(labelTrue).append(":\n"); // 5
-            // jasminCode.append("   iconst_1\n");
+
+            ParseTree parent = ctx.getParent();
+            System.out.println("here!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+            // jasminCode.append(parent.getText());
+            // if (parent instanceof ImperativeLangParser.StatementContext) {
+            //     System.out.println("Этот routinecall является частью statement...");
+            //     ImperativeLangParser.StatementContext stCtx = (ImperativeLangParser.StatementContext) parent;
+            //     parent = stCtx.getParent();
+                if (parent instanceof ImperativeLangParser.ExpressionContext) {
+                    System.out.println("Этот statement является частью expression...");
+                    ImperativeLangParser.ExpressionContext exCtx = (ImperativeLangParser.ExpressionContext) parent;
+                    parent = exCtx.getParent();
+                    if (parent instanceof ImperativeLangParser.IfStatementContext) {
+                        System.out.println("Этот body является частью ifStatement...");
+                        ImperativeLangParser.IfStatementContext ifCtx = (ImperativeLangParser.IfStatementContext) parent;
+                        if (ifCtx.getText().contains("else")){
+                            jasminCode.append("   goto Label").append(endLabelsStack.peek()).append("\n"); // через перента
+
+                            jasminCode.append("Label").append(labelTrue).append(":\n"); // 5
+                        } else {
+                            jasminCode.append("   goto Label").append(ifEndLabelsStack.peek()).append("\n"); // через перента
+
+                            jasminCode.append("Label").append(labelTrue).append(":\n"); // 5
+
+                            System.out.println("no else((");
+                        }
+                        // if (ifCtx.body(0).getText().equals(ctx.getText())) {
+                        //     System.out.println("скип2");
+
+                        //     return;
+                        // }
+                    } else {
+                        jasminCode.append("   goto Label").append(endLabelsStack.peek()).append("\n"); // через перента
+
+                        jasminCode.append("Label").append(labelTrue).append(":\n");
+                    }
+
+                }
+
+            // }
+            // jasminCode.append("0   goto Label").append(endLabelsStack.peek()).append("\n"); // через перента
+
+            // jasminCode.append("Label").append(labelTrue).append(":\n"); // 5
+            // jasminCode.append(" iconst_1\n");
             // updateStack(1); // Already accounted for
             // jasminCode.append("6Label").append(labelEnd).append(":\n");
 
-            // jasminCode.append("   generateRelation end").append("\n");
+            // jasminCode.append(" generateRelation end").append("\n");
         }
     }
 
     private void generateSimple(ImperativeLangParser.SimpleContext ctx) {
-        // System.out.println("generateSimple " + ctx.getText() + " " + ctx.factor().size());
+        System.out.println("generateSimple " + ctx.getText() + " " + ctx.factor().size());
         if (ctx.factor().size() == 1) {
             generateFactor(ctx.factor(0));
         } else {
@@ -713,8 +1073,8 @@ public class Compiler extends ImperativeLangBaseListener {
             for (int i = 1; i < ctx.factor().size(); i++) {
                 generateFactor(ctx.factor(i));
                 String op = ctx.getChild(2 * i - 1).getText();
-
-                if (exprType.equals("I")) {
+                System.out.println("++++++++++++++++++++++++++++++++++++++++++++++" + exprType);
+                if (exprType.equals("I") || exprType.equals("integer")) {
                     switch (op) {
                         case "*":
                             jasminCode.append("   imul\n");
@@ -758,7 +1118,8 @@ public class Compiler extends ImperativeLangBaseListener {
     }
 
     private void generateFactor(ImperativeLangParser.FactorContext ctx) {
-        // System.out.println("generateFactor " + ctx.getText() + " " + ctx.summand().size());
+        // System.out.println("generateFactor " + ctx.getText() + " " +
+        // ctx.summand().size());
         if (ctx.summand().size() == 1) {
             generateSummand(ctx.summand(0));
         } else {
@@ -798,8 +1159,8 @@ public class Compiler extends ImperativeLangBaseListener {
 
     private void generateSummand(ImperativeLangParser.SummandContext ctx) {
         // System.out.println("generateSummand " + ctx.getText() +
-                // " type: " + getExpressionType(ctx) +
-                // " context: " + ctx.primary());
+        // " type: " + getExpressionType(ctx) +
+        // " context: " + ctx.primary());
         if (ctx.primary() != null) {
             generatePrimary(ctx.primary());
         } else if (ctx.expression() != null) {
@@ -809,6 +1170,9 @@ public class Compiler extends ImperativeLangBaseListener {
 
     private void generatePrimary(ImperativeLangParser.PrimaryContext ctx) {
         // System.out.println("generatePrimary " + ctx.getText());
+        // jasminCode.append(" here\n");
+        System.err.println("-----------------primary " + ctx.getText());
+
         if (ctx.INTEGER_LITERAL() != null) {
             System.out.println("generatePrimary INTEGER_LITERAL " + ctx.INTEGER_LITERAL().getText());
             int value = Integer.parseInt(ctx.INTEGER_LITERAL().getText());
@@ -850,8 +1214,14 @@ public class Compiler extends ImperativeLangBaseListener {
         } else if (ctx.modifiablePrimary() != null) {
             generateModifiablePrimary(ctx.modifiablePrimary());
         } else if (ctx.routineCall() != null) {
+            System.err.println("-----------------routineCall " + ctx.routineCall().getText());
+            // jasminCode.append(ctx.routineCall().getText() + "\n");
             // Handle routine calls
             generateRoutineCall(ctx.routineCall());
+            // jasminCode.append(" iconst_1\n");
+            // updateStack(1);
+            // jasminCode.append(" isub\n");
+            // updateStack(-1);
         }
     }
 
@@ -865,7 +1235,8 @@ public class Compiler extends ImperativeLangBaseListener {
 
         if (ctx.getChildCount() == 1) {
             // Simple variable
-            if (varType.equals("I") || varType.equals("Z") || varType.equals("integer") || varType.equals("boolean") || varType.equals("bool")) {
+            if (varType.equals("I") || varType.equals("Z") || varType.equals("integer") || varType.equals("boolean")
+                    || varType.equals("bool")) {
                 jasminCode.append("   iload ").append(varIndex).append("\n");
                 updateStack(1);
             } else if (varType.equals("D")) {
@@ -874,7 +1245,8 @@ public class Compiler extends ImperativeLangBaseListener {
             }
         } else {
             // Access array element (not implemented)
-            // throw new UnsupportedOperationException("Array access is not supported yet.");
+            // throw new UnsupportedOperationException("Array access is not supported
+            // yet.");
             // Доступ к элементу массива
             if (varType.startsWith("Array<")) {
                 String elementType = varType.substring(6, varType.length() - 1); // Получаем тип элементов массива
@@ -886,6 +1258,13 @@ public class Compiler extends ImperativeLangBaseListener {
                 // Обработка индекса массива
                 ImperativeLangParser.ExpressionContext indexCtx = ctx.expression(0);
                 generateExpression(indexCtx); // Генерация кода для вычисления индекса
+                if (ctx.getText().contains("[")) {
+                    System.err.println("-----------------arr " + ctx.getText());
+                    jasminCode.append("   iconst_1\n");
+                    updateStack(1);
+                    jasminCode.append("   isub\n");
+                    updateStack(-1);
+                }
 
                 // Загрузка элемента массива в зависимости от типа
                 if (elementType.equals("integer") || elementType.equals("I")) {
@@ -901,6 +1280,7 @@ public class Compiler extends ImperativeLangBaseListener {
                     throw new UnsupportedOperationException("Array type " + elementType + " not supported yet.");
                 }
             } else {
+                System.out.println("-----------non-array type " + ctx.getText());
                 throw new UnsupportedOperationException("Accessing non-array type as array: " + varType);
             }
         }
@@ -934,7 +1314,8 @@ public class Compiler extends ImperativeLangBaseListener {
         // ctx.getText());
         // Determine the type of the expression
         if (ctx instanceof ImperativeLangParser.PrimaryContext primaryCtx) {
-            // System.out.println("primaryCtx is " + primaryCtx.getClass().getSimpleName() + " " + primaryCtx.getText());
+            // System.out.println("primaryCtx is " + primaryCtx.getClass().getSimpleName() +
+            // " " + primaryCtx.getText());
             if (primaryCtx.INTEGER_LITERAL() != null) {
                 // System.out.println("it is int");
                 return "I";
@@ -984,12 +1365,12 @@ public class Compiler extends ImperativeLangBaseListener {
         System.out.println("\nEntering for loop...");
 
         int startLabel = getNextLabel(); // Метка начала цикла
-        int endLabel = getNextLabel();   // Метка конца цикла
+        int endLabel = getNextLabel(); // Метка конца цикла
 
-        String varName = ctx.IDENTIFIER().getText();  // Получаем имя переменной
-        variableTypeMap.put(varName, "integer");  // Устанавливаем тип переменной как "I" (целое число)
-    
-        System.out.println("------------------------------------"+ varName);
+        String varName = ctx.IDENTIFIER().getText(); // Получаем имя переменной
+        variableTypeMap.put(varName, "integer"); // Устанавливаем тип переменной как "I" (целое число)
+
+        System.out.println("------------------------------------" + varName);
         int varIndex = getVariableIndex(varName, "integer", 1);
 
         // getVariableIndex(variableName, variableType, 1);
@@ -1001,41 +1382,45 @@ public class Compiler extends ImperativeLangBaseListener {
         boolean isReverse = ctx.getText().contains("reverse");
 
         // Генерация кода для начального значения диапазона
-        generateExpression(ctx.range().expression(0));  // Первое выражение в range
-        // jasminCode.append("   istore");             // Сохраняем в локальную переменную (цикл переменная)
+        generateExpression(ctx.range().expression(0)); // Первое выражение в range
+        // jasminCode.append(" istore"); // Сохраняем в локальную переменную (цикл
+        // переменная)
         performTypeCast(analyzeExpressionType(ctx.range().expression(0)), "integer");
         varIndex = getVariableIndex(varName, "integer", 1);
         jasminCode.append("   istore ").append(varIndex).append("\n");
         updateStack(1);
 
         // Генерация кода для конечного значения диапазона
-        generateExpression(ctx.range().expression(1));  // Второе выражение в range
-        
-        // jasminCode.append("   istore");             // Сохраняем в локальную переменную (конец диапазона)
+        generateExpression(ctx.range().expression(1)); // Второе выражение в range
+
+        // jasminCode.append(" istore"); // Сохраняем в локальную переменную (конец
+        // диапазона)
         System.out.println("ctx.range() " + ctx.range().expression(1).getText());
         performTypeCast(analyzeExpressionType(ctx.range().expression(1)), "integer");
         varIndex = getVariableIndex(ctx.range().expression(1).getText(), "integer", 1);
         jasminCode.append("   istore ").append(varIndex).append("\n");
         updateStack(1);
 
-
         // Метка начала цикла
         jasminCode.append("Label").append(startLabel).append(":\n");
 
         // Загружаем значения переменной и конца диапазона
-        jasminCode.append("   iload ").append(variableIndexMap.get(varName)).append("\n");  // Текущее значение переменной цикла ??
+        jasminCode.append("   iload ").append(variableIndexMap.get(varName)).append("\n"); // Текущее значение
+                                                                                           // переменной цикла ??
         updateStack(1);
-        jasminCode.append("   iload ").append(variableIndexMap.get(ctx.range().expression(1).getText())).append("\n");  // Конечное значение диапазона ??
+        jasminCode.append("   iload ").append(variableIndexMap.get(ctx.range().expression(1).getText())).append("\n"); // Конечное
+                                                                                                                       // значение
+                                                                                                                       // диапазона
+                                                                                                                       // ??
         updateStack(1);
 
         // Условие выхода из цикла
         if (isReverse) {
-            jasminCode.append("   if_icmplt Label").append(endLabel).append("\n");  // Для обратного порядка
+            jasminCode.append("   if_icmplt Label").append(endLabel).append("\n"); // Для обратного порядка
         } else {
-            jasminCode.append("   if_icmpgt Label").append(endLabel).append("\n");  // Для прямого порядка
+            jasminCode.append("   if_icmpgt Label").append(endLabel).append("\n"); // Для прямого порядка
         }
     }
-
 
     @Override
     public void exitForLoop(ImperativeLangParser.ForLoopContext ctx) {
@@ -1048,23 +1433,22 @@ public class Compiler extends ImperativeLangBaseListener {
         boolean isReverse = ctx.getText().contains("reverse");
 
         // Обновление переменной цикла: прибавление или вычитание
-        jasminCode.append("   iload ").append(variableIndexMap.get(ctx.IDENTIFIER().getText())).append("\n"); 
+        jasminCode.append("   iload ").append(variableIndexMap.get(ctx.IDENTIFIER().getText())).append("\n");
         updateStack(1);
 
         if (isReverse) {
             jasminCode.append("   iconst_1\n");
             updateStack(1);
 
-            jasminCode.append("   isub\n");  // Вычитаем 1, если 'reverse'
+            jasminCode.append("   isub\n"); // Вычитаем 1, если 'reverse'
         } else {
             jasminCode.append("   iconst_1\n");
             updateStack(1);
 
-            jasminCode.append("   iadd\n");  // Прибавляем 1, если нет 'reverse'
+            jasminCode.append("   iadd\n"); // Прибавляем 1, если нет 'reverse'
         }
-        // jasminCode.append("   istore\n");
+        // jasminCode.append(" istore\n");
         jasminCode.append("   istore ").append(variableIndexMap.get(ctx.IDENTIFIER().getText())).append("\n");
-        
 
         // Переход к началу цикла
         jasminCode.append("   goto Label").append(startLabel).append("\n");
@@ -1072,6 +1456,5 @@ public class Compiler extends ImperativeLangBaseListener {
         // Метка конца цикла
         jasminCode.append("Label").append(endLabel).append(":\n");
     }
-
 
 }

@@ -1,0 +1,8 @@
+routine Main() is
+    for i in 1..10 loop
+        for j in 1..10 loop
+            var product : integer is i * j
+            print(product)
+        end
+    end
+end

@@ -1,0 +1,8 @@
+routine Square(x : integer) : integer is
+    return x * x
+end
+
+routine Main() is
+    var result : integer is Square(5)
+    print(result)
+end

@@ -1,0 +1,27 @@
+type Complex is record
+    {
+    var realPart : real
+    var imag : real
+    }
+end
+
+routine AddComplex(a : Complex, b : Complex) : Complex is
+    var result : Complex
+    result.realPart := a.realPart + b.realPart
+    result.imag := a.imag + b.imag
+    return result
+end
+
+routine Main() is
+    var c1 : Complex
+    c1.realPart := 2.5
+    c1.imag := 3.5
+
+    var c2 : Complex
+    c2.realPart := 1.5
+    c2.imag := 2.5
+
+    var result : Complex is AddComplex(c1, c2)
+    print(result.realPart)
+    print(result.imag)
+end

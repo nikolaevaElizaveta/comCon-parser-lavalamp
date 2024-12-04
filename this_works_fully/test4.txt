@@ -1,0 +1,10 @@
+routine Main() is
+    var a : integer is 7
+    var b : integer is 10
+
+    if a > b then
+        print(a)
+    else
+        print(b)
+    end
+end

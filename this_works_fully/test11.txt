@@ -1,0 +1,13 @@
+routine Main() is
+    var value : integer is 15
+
+    if value < 10 then
+        if value > 1 then
+            print(10)
+        else
+            print(1)
+        end
+    else
+        print(value)
+    end
+end

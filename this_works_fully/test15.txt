@@ -1,0 +1,10 @@
+routine Main() is        
+    var x : integer is 15
+    var y : integer    
+    var z : real
+    var w : boolean
+
+    if x > 10 then                
+        print(x)
+    end
+end

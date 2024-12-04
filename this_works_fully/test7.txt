@@ -1,0 +1,11 @@
+routine Main() is
+    var arr : array[10] integer
+
+    for i in 1..10 loop
+        arr[i] := i * 2
+    end
+
+    for i in 1..10 loop
+        print(arr[i])
+    end
+end

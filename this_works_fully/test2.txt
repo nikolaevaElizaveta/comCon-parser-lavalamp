@@ -1,0 +1,9 @@
+routine Main() is
+    var a : integer is 10
+    var b : real is 3.14
+    var c : boolean is true
+
+    print(a)
+    print(b)
+    print(c)
+end

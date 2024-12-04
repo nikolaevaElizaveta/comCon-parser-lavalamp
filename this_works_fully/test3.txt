@@ -1,0 +1,15 @@
+routine Main() is
+    var x : integer is 5
+    var y : integer is 3
+    var z : real is 4.5
+
+    var add : integer is x + y
+    var sub : integer is x - y
+    var mul : integer is x * y
+    var div : real is z / z
+
+    print(add)
+    print(sub)
+    print(mul)
+    print(div)
+end

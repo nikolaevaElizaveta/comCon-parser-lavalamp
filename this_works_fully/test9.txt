@@ -1,0 +1,9 @@
+routine Add(a : integer, b : integer) is
+    var result : integer is a + b
+    print(result)
+end
+
+routine Main() is
+    Add(5, 10)
+    Add(15, 25)
+end

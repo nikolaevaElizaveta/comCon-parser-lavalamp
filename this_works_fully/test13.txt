@@ -1,0 +1,18 @@
+routine SumArray(arr : array[10] integer) : integer is
+    var sum : integer is 0
+    for i in 1..10 loop
+        sum := sum + arr[i]
+    end
+    return sum
+end
+
+routine Main() is
+    var arr : array[10] integer
+
+    for i in 1..10 loop
+        arr[i] := i
+    end
+
+    var result : integer is SumArray(arr)
+    print(result)
+end

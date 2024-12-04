@@ -1,0 +1,15 @@
+type Student is record
+   {
+    var age : integer
+    var grade : real
+   }
+end
+
+routine Main() is
+    var s : Student
+    s.age := 20
+    s.grade := 3.7
+
+    print(s.age)
+    print(s.grade)
+end
